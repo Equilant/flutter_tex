@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tex/flutter_tex.dart';
@@ -19,10 +22,11 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
     _controller = WebViewControllerPlus()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Color(Colors.transparent.value))
-      ..loadFlutterAssetServer(
+      ..loadFlutterAsset(
           "packages/flutter_tex/js/${widget.renderingEngine?.name ?? 'katex'}/index.html")
       ..setNavigationDelegate(
         NavigationDelegate(
+          onNavigationRequest: widget.onNavigationRequest,
           onPageFinished: (String url) {
             _pageLoaded = true;
             _initTeXView();
@@ -42,12 +46,57 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
         double height = double.parse(jm.message);
         if (_height != height) {
           setState(() {
-            _height = height;
+            _height = height + 24;
           });
         }
-        widget.onRenderFinished?.call(height);
+        final width = await getOptimizedContentWidth();
+
+        widget.onRenderFinished?.call(height, width);
       });
     super.initState();
+  }
+
+  Future<double> getOptimizedContentWidth() async {
+    String getContentWidthScript = r"""
+      var element = document.body;
+      var contentWidth = element.scrollWidth;
+      var style = window.getComputedStyle(element);
+      var totalMargin = ['left', 'right']
+          .map(function (side) {
+              return parseInt(style["margin-" + side]);
+          })
+          .reduce(function (total, side) {
+              return total + side;
+          }, contentWidth);
+      totalMargin;
+  """;
+
+    String getMaxWidthScript = r"""
+      var elements = document.getElementsByTagName('*');
+      var maxWidth = 0;
+      for (var i = 0; i < elements.length; i++) {
+          maxWidth = Math.max(maxWidth, elements[i].scrollWidth);
+      }
+      maxWidth;
+  """;
+
+    final isAndroid = Platform.isAndroid;
+    var totalMargin =
+        await _controller.runJavaScriptReturningResult(getContentWidthScript);
+    var maxWidth =
+        await _controller.runJavaScriptReturningResult(getMaxWidthScript);
+
+    if (isAndroid) {
+      totalMargin = totalMargin as int;
+      maxWidth = maxWidth as int;
+      return totalMargin > maxWidth
+          ? totalMargin.toDouble()
+          : maxWidth.toDouble();
+    } else {
+      totalMargin = totalMargin as double;
+      maxWidth = maxWidth as double;
+      return totalMargin > maxWidth ? totalMargin : maxWidth;
+    }
   }
 
   @override
