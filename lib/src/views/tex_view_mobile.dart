@@ -29,7 +29,7 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
           onNavigationRequest: widget.onNavigationRequest,
           onPageFinished: (String url) {
             _pageLoaded = true;
-            _initTeXView();
+            Future.delayed(const Duration(milliseconds: 100), _initTeXView);
           },
         ),
       )
@@ -43,15 +43,15 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
       })
       ..addJavaScriptChannel('TeXViewRenderedCallback',
           onMessageReceived: (jm) async {
-        double height = double.parse(jm.message);
-        if (_height != height) {
+        double newHeight = double.tryParse(jm.message) ?? minHeight;
+        if ((_height - newHeight).abs() > 5) {
           setState(() {
-            _height = height + 24;
+            _height = newHeight + 24;
           });
         }
         final width = await getOptimizedContentWidth();
 
-        widget.onRenderFinished?.call(height, width);
+        widget.onRenderFinished?.call(_height, width);
       });
     super.initState();
   }
@@ -103,13 +103,8 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
   Widget build(BuildContext context) {
     super.build(context);
     updateKeepAlive();
-    _initTeXView();
-    return IndexedStack(
-      index: widget.loadingWidgetBuilder?.call(context) != null
-          ? _height == minHeight
-              ? 1
-              : 0
-          : 0,
+
+    return Stack(
       children: <Widget>[
         SizedBox(
           height: _height,
@@ -117,22 +112,17 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
             controller: _controller,
           ),
         ),
-        widget.loadingWidgetBuilder?.call(context) ?? const SizedBox.shrink()
+        if (_height == minHeight && widget.loadingWidgetBuilder != null)
+          Positioned.fill(child: widget.loadingWidgetBuilder!(context)),
       ],
     );
-  }
-
-  @override
-  void dispose() {
-    _controller.server.close();
-    super.dispose();
   }
 
   void _initTeXView() {
     if (_pageLoaded && getRawData(widget) != _lastData) {
       if (widget.loadingWidgetBuilder != null) _height = minHeight;
       _controller
-          .runJavaScriptReturningResult("initView(${getRawData(widget)})");
+          .runJavaScript("initView(${getRawData(widget)})");
       _lastData = getRawData(widget);
     }
   }
