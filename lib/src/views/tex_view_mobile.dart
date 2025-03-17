@@ -27,9 +27,9 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
       ..setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: widget.onNavigationRequest,
-          onPageFinished: (String url) async {
+          onPageFinished: (String url) {
             _pageLoaded = true;
-            await _initTeXView();
+            _initTeXView();
           },
         ),
       )
@@ -122,11 +122,17 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
     );
   }
 
-  Future<void> _initTeXView() async {
+  @override
+  void dispose() {
+    _controller.server.close();
+    super.dispose();
+  }
+
+  void _initTeXView() {
     if (_pageLoaded && getRawData(widget) != _lastData) {
       if (widget.loadingWidgetBuilder != null) _height = minHeight;
-      await _controller
-          .runJavaScript("initView(${getRawData(widget)})");
+      _controller
+          .runJavaScriptReturningResult("initView(${getRawData(widget)})");
       _lastData = getRawData(widget);
     }
   }
