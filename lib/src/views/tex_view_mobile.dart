@@ -43,16 +43,16 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
       })
       ..addJavaScriptChannel('TeXViewRenderedCallback',
           onMessageReceived: (jm) async {
-        double newHeight = double.tryParse(jm.message) ?? minHeight;
-        if ((_height - newHeight).abs() > 5) {
-          setState(() {
-            _height = newHeight + 24;
-          });
-        }
-        final width = await getOptimizedContentWidth();
+            double newHeight = double.tryParse(jm.message) ?? minHeight;
+            if ((_height - newHeight).abs() > 5) {
+              setState(() {
+                _height = newHeight + 24;
+              });
+            }
+            final width = await getOptimizedContentWidth();
 
-        widget.onRenderFinished?.call(_height, width);
-      });
+            widget.onRenderFinished?.call(_height, width);
+          });
     super.initState();
   }
 
@@ -82,9 +82,9 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
 
     final isAndroid = Platform.isAndroid;
     var totalMargin =
-        await _controller.runJavaScriptReturningResult(getContentWidthScript);
+    await _controller.runJavaScriptReturningResult(getContentWidthScript);
     var maxWidth =
-        await _controller.runJavaScriptReturningResult(getMaxWidthScript);
+    await _controller.runJavaScriptReturningResult(getMaxWidthScript);
 
     if (isAndroid) {
       totalMargin = totalMargin as int;
@@ -113,7 +113,13 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
           ),
         ),
         if (_height == minHeight && widget.loadingWidgetBuilder != null)
-          Positioned.fill(child: widget.loadingWidgetBuilder!(context)),
+          Center(
+            child: SizedBox(
+              height: 40,
+              width: 40,
+              child: widget.loadingWidgetBuilder!(context),
+            ),
+          ),
       ],
     );
   }
@@ -121,8 +127,7 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
   void _initTeXView() {
     if (_pageLoaded && getRawData(widget) != _lastData) {
       if (widget.loadingWidgetBuilder != null) _height = minHeight;
-      _controller
-          .runJavaScript("initView(${getRawData(widget)})");
+      _controller.runJavaScript("initView(${getRawData(widget)})");
       _lastData = getRawData(widget);
     }
   }
