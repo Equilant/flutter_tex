@@ -8,7 +8,7 @@ import 'package:flutter_tex/src/utils/core_utils.dart';
 import 'package:webview_flutter_plus/webview_flutter_plus.dart';
 
 class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
-  late WebViewControllerPlus _controller;
+  late final WebViewControllerPlus _controller;
 
   double _height = minHeight;
   String? _lastData;
@@ -19,6 +19,7 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
 
   @override
   void initState() {
+    super.initState();
     _controller = WebViewControllerPlus()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Color(Colors.transparent.value))
@@ -28,8 +29,10 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
         NavigationDelegate(
           onNavigationRequest: widget.onNavigationRequest,
           onPageFinished: (String url) {
-            _pageLoaded = true;
-            Future.delayed(const Duration(milliseconds: 100), _initTeXView);
+            if (!_pageLoaded) {
+              _pageLoaded = true;
+              Future.delayed(const Duration(milliseconds: 100), _initTeXView);
+            }
           },
         ),
       )
@@ -43,17 +46,16 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
       })
       ..addJavaScriptChannel('TeXViewRenderedCallback',
           onMessageReceived: (jm) async {
-            double newHeight = double.tryParse(jm.message) ?? minHeight;
-            if ((_height - newHeight).abs() > 5) {
-              setState(() {
-                _height = newHeight + 24;
-              });
-            }
-            final width = await getOptimizedContentWidth();
-
-            widget.onRenderFinished?.call(_height, width);
+        double newHeight = double.tryParse(jm.message) ?? minHeight;
+        if ((_height - newHeight).abs() > 5) {
+          setState(() {
+            _height = newHeight + 24;
           });
-    super.initState();
+        }
+        final width = await getOptimizedContentWidth();
+
+        widget.onRenderFinished?.call(_height, width);
+      });
   }
 
   Future<double> getOptimizedContentWidth() async {
@@ -82,9 +84,9 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
 
     final isAndroid = Platform.isAndroid;
     var totalMargin =
-    await _controller.runJavaScriptReturningResult(getContentWidthScript);
+        await _controller.runJavaScriptReturningResult(getContentWidthScript);
     var maxWidth =
-    await _controller.runJavaScriptReturningResult(getMaxWidthScript);
+        await _controller.runJavaScriptReturningResult(getMaxWidthScript);
 
     if (isAndroid) {
       totalMargin = totalMargin as int;
@@ -104,31 +106,39 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
     super.build(context);
     updateKeepAlive();
 
-    return Stack(
-      children: <Widget>[
-        SizedBox(
-          height: _height,
-          child: WebViewWidget(
-            controller: _controller,
-          ),
-        ),
-        if (_height == minHeight && widget.loadingWidgetBuilder != null)
-          Center(
-            child: SizedBox(
-              height: 40,
-              width: 40,
-              child: widget.loadingWidgetBuilder!(context),
-            ),
-          ),
-      ],
-    );
+    return AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        child: _pageLoaded
+            ? SizedBox(
+                height: _height,
+                child: WebViewWidget(controller: _controller),
+              )
+            : Center(
+                child: SizedBox(
+                  height: 40,
+                  width: 40,
+                  child: widget.loadingWidgetBuilder?.call(context) ??
+                      const SizedBox.shrink(),
+                ),
+              ));
+  }
+
+  @override
+  void dispose() {
+    _controller.clearCache();
+    super.dispose();
   }
 
   void _initTeXView() {
-    if (_pageLoaded && getRawData(widget) != _lastData) {
-      if (widget.loadingWidgetBuilder != null) _height = minHeight;
-      _controller.runJavaScript("initView(${getRawData(widget)})");
-      _lastData = getRawData(widget);
+    if (!_pageLoaded || getRawData(widget) == _lastData) return;
+
+    if (widget.loadingWidgetBuilder != null) {
+      setState(() {
+        _height = minHeight;
+      });
     }
+
+    _controller.runJavaScript("initView(${getRawData(widget)})");
+    _lastData = getRawData(widget);
   }
 }
