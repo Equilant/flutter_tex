@@ -18,44 +18,47 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
   bool get wantKeepAlive => true;
 
   @override
+  @override
   void initState() {
     super.initState();
-    _controller = WebViewControllerPlus()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Color(Colors.transparent.value))
-      ..loadFlutterAsset(
-          "packages/flutter_tex/js/${widget.renderingEngine?.name ?? 'katex'}/index.html")
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onNavigationRequest: widget.onNavigationRequest,
-          onPageFinished: (String url) {
-            if (!_pageLoaded) {
-              _pageLoaded = true;
-              Future.delayed(const Duration(milliseconds: 100), _initTeXView);
-            }
-          },
-        ),
-      )
-      ..setOnConsoleMessage((message) {
-        if (kDebugMode) {
-          print(message);
-        }
-      })
-      ..addJavaScriptChannel('OnTapCallback', onMessageReceived: (jm) {
-        widget.child.onTapCallback(jm.message);
-      })
-      ..addJavaScriptChannel('TeXViewRenderedCallback',
-          onMessageReceived: (jm) async {
-        double newHeight = double.tryParse(jm.message) ?? minHeight;
-        if ((_height - newHeight).abs() > 5) {
-          setState(() {
-            _height = newHeight + 24;
-          });
-        }
-        final width = await getOptimizedContentWidth();
 
-        widget.onRenderFinished?.call(_height, width);
-      });
+    if (mounted) {
+      _controller = WebViewControllerPlus()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setBackgroundColor(Color(Colors.transparent.value))
+        ..loadFlutterAsset(
+            "packages/flutter_tex/js/${widget.renderingEngine?.name ?? 'katex'}/index.html")
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onNavigationRequest: widget.onNavigationRequest,
+            onPageFinished: (String url) {
+              if (!_pageLoaded) {
+                _pageLoaded = true;
+                Future.delayed(const Duration(milliseconds: 100), _initTeXView);
+              }
+            },
+          ),
+        )
+        ..setOnConsoleMessage((message) {
+          if (kDebugMode) {
+            print(message);
+          }
+        })
+        ..addJavaScriptChannel('OnTapCallback', onMessageReceived: (jm) {
+          widget.child.onTapCallback(jm.message);
+        })
+        ..addJavaScriptChannel('TeXViewRenderedCallback',
+            onMessageReceived: (jm) async {
+              double newHeight = double.tryParse(jm.message) ?? minHeight;
+              if ((_height - newHeight).abs() > 5) {
+                setState(() {
+                  _height = newHeight + 24;
+                });
+              }
+              final width = await getOptimizedContentWidth();
+              widget.onRenderFinished?.call(_height, width);
+            });
+    }
   }
 
   Future<double> getOptimizedContentWidth() async {
@@ -84,9 +87,9 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
 
     final isAndroid = Platform.isAndroid;
     var totalMargin =
-        await _controller.runJavaScriptReturningResult(getContentWidthScript);
+    await _controller.runJavaScriptReturningResult(getContentWidthScript);
     var maxWidth =
-        await _controller.runJavaScriptReturningResult(getMaxWidthScript);
+    await _controller.runJavaScriptReturningResult(getMaxWidthScript);
 
     if (isAndroid) {
       totalMargin = totalMargin as int;
@@ -110,35 +113,36 @@ class TeXViewState extends State<TeXView> with AutomaticKeepAliveClientMixin {
         duration: const Duration(milliseconds: 300),
         child: _pageLoaded
             ? SizedBox(
-                height: _height,
-                child: WebViewWidget(controller: _controller),
-              )
+          height: _height,
+          child: WebViewWidget(controller: _controller),
+        )
             : Center(
-                child: SizedBox(
-                  height: 40,
-                  width: 40,
-                  child: widget.loadingWidgetBuilder?.call(context) ??
-                      const SizedBox.shrink(),
-                ),
-              ));
+          child: SizedBox(
+            height: 40,
+            width: 40,
+            child: widget.loadingWidgetBuilder?.call(context) ??
+                const SizedBox.shrink(),
+          ),
+        ));
   }
 
   @override
   void dispose() {
     _controller.clearCache();
+    _controller.clearLocalStorage();
+    _controller.runJavaScript('document.body.innerHTML = "";');
     super.dispose();
   }
 
   void _initTeXView() {
-    if (!_pageLoaded || getRawData(widget) == _lastData) return;
-
-    if (widget.loadingWidgetBuilder != null) {
-      setState(() {
-        _height = minHeight;
-      });
+    if (_pageLoaded && mounted && getRawData(widget) != _lastData) {
+      if (widget.loadingWidgetBuilder != null) {
+        setState(() {
+          _height = minHeight;
+        });
+      }
+      _controller.runJavaScript("initView(${getRawData(widget)})");
+      _lastData = getRawData(widget);
     }
-
-    _controller.runJavaScript("initView(${getRawData(widget)})");
-    _lastData = getRawData(widget);
   }
 }
